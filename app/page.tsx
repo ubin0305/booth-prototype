@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 
-// 🔥 독립된 캔버스에서 문양에 색상만 입혀 Data URL을 반환하는 함수
-// 이 함수는 원본 이미지가 투명 PNG일 때만 정확히 작동합니다.
+// 🔥 독립된 캔버스에서 문양에 색상만 입혀 Data URL을 반환하는 함수 (투명도 초기화 강화)
 const createTintedPattern = (img: HTMLImageElement, color: string | null): Promise<string> => {
     return new Promise((resolve) => {
         const canvas = document.createElement('canvas');
@@ -12,6 +11,9 @@ const createTintedPattern = (img: HTMLImageElement, color: string | null): Promi
         canvas.width = size;
         canvas.height = size;
         const ctx = canvas.getContext('2d')!;
+
+        // ✅ 캔버스를 투명하게 초기화하는 코드 추가
+        ctx.clearRect(0, 0, size, size);
 
         ctx.drawImage(img, 0, 0, size, size);
 
@@ -21,6 +23,7 @@ const createTintedPattern = (img: HTMLImageElement, color: string | null): Promi
             ctx.fillRect(0, 0, size, size);
         }
         
+        // 투명도를 유지하기 위해 PNG로 Data URL 반환
         resolve(canvas.toDataURL("image/png"));
     });
 };
@@ -35,7 +38,14 @@ export default function Home() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [finalImage, setFinalImage] = useState<string | null>(null);
   const [qrData, setQrData] = useState<string | null>(null);
-  const [tintColor, setTintColor] = useState<string | null>(null);
+  
+  const filters = [
+    "#F7AE91", "#6DCFF4", "#B1B1B1", "#8CEB9C",
+    "#FECF59", "#F19EFF", "#84A6F6", "#D3CA9F",
+  ];
+  
+  // 🔥 초기값을 filters[0]으로 설정하여 색상 강제 활성화
+  const [tintColor, setTintColor] = useState<string | null>(filters[0]); 
 
   // Body 스타일 강제 덮어쓰기
   useEffect(() => {
@@ -49,27 +59,7 @@ export default function Home() {
     "/patterns/p5.png", "/patterns/p6.png", "/patterns/p7.png", "/patterns/p8.png",
   ];
 
-  const filters = [
-    "#F7AE91", "#6DCFF4", "#B1B1B1", "#8CEB9C",
-    "#FECF59", "#F19EFF", "#84A6F6", "#D3CA9F",
-  ];
-
-  // 카메라 시작 (로직 유지)
-  useEffect(() => {
-    navigator.mediaDevices
-      .getUserMedia({ video: true })
-      .then((stream) => {
-        if (videoRef.current) {
-          (videoRef.current as any).srcObject = stream;
-          videoRef.current.play();
-        }
-      })
-      .catch((err) => {
-          console.error("카메라 접근 오류:", err);
-      });
-  }, []);
-
-  // 문양 이미지 로드 (로직 유지)
+  // 문양 이미지 로드
   useEffect(() => {
     if (!pattern) return setLoadedPatternImg(null);
     const img = new Image();
@@ -77,7 +67,7 @@ export default function Home() {
     img.onload = () => setLoadedPatternImg(img);
   }, [pattern]);
 
-  // 🔥 프리뷰용 함수 (원본 이미지의 불투명 영역에만 색상 적용)
+  // 프리뷰용 함수
   const drawTintedPattern = (
     ctx: CanvasRenderingContext2D,
     img: HTMLImageElement,
@@ -94,7 +84,22 @@ export default function Home() {
     }
   };
 
-  // 프리뷰 렌더링 (로직 유지)
+  // 카메라 시작
+  useEffect(() => {
+    navigator.mediaDevices
+      .getUserMedia({ video: true })
+      .then((stream) => {
+        if (videoRef.current) {
+          (videoRef.current as any).srcObject = stream;
+          videoRef.current.play();
+        }
+      })
+      .catch((err) => {
+          console.error("카메라 접근 오류:", err);
+      });
+  }, []);
+  
+  // 프리뷰 렌더링
   useEffect(() => {
     const loop = () => {
       const video = videoRef.current;
@@ -135,7 +140,7 @@ export default function Home() {
   const performCapture = async () => {
     const video = videoRef.current;
     const capture = captureRef.current;
-    if (!video || !capture) return;
+    if (!video || !capture || !loadedPatternImg) return;
 
     // 1. 캡처 캔버스에 비디오만 그리기
     const size = 800;
@@ -150,6 +155,7 @@ export default function Home() {
     let h = size / ratio;
     if (h < size) { h = size; w = size * ratio; }
 
+    // 비디오 원본 그리기 (배경)
     ctx.drawImage(video, (size - w) / 2, (size - h) / 2, w, h);
     
     // 2. 색상이 적용된 문양을 별도의 캔버스에서 생성 후 덧그리기
@@ -174,7 +180,7 @@ export default function Home() {
     setFinalImage(base); // 최종 이미지 설정
 
     // 3. QR 코드 생성 (API 호출 활성화)
-    let imageUrl = "https://example.com/error-upload"; // 업로드 실패 시 대체 URL
+    let imageUrl = "https://your-final-photo-link.com/photo-" + Date.now(); // 임시 URL
     
     try {
         const up = await fetch("/api/upload", { 
@@ -183,7 +189,7 @@ export default function Home() {
             body: JSON.stringify({ imageBase64: base }) 
         });
         const data = await up.json();
-        if (data.url) imageUrl = data.url; 
+        if (data.url) imageUrl = data.url; // 서버에서 반환한 실제 URL 사용
         else console.error("API 응답에 URL이 없습니다:", data);
 
     } catch (e) {
