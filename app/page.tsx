@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 
-// 🔥 독립된 캔버스에서 문양에 색상만 입혀 Data URL을 반환하는 함수 (투명도 초기화 강화)
+// 독립된 캔버스에서 문양에 색상만 입혀 Data URL을 반환하는 함수
 const createTintedPattern = (img: HTMLImageElement, color: string | null): Promise<string> => {
     return new Promise((resolve) => {
         const canvas = document.createElement('canvas');
@@ -12,7 +12,6 @@ const createTintedPattern = (img: HTMLImageElement, color: string | null): Promi
         canvas.height = size;
         const ctx = canvas.getContext('2d')!;
 
-        // ✅ 캔버스를 투명하게 초기화하는 코드 추가
         ctx.clearRect(0, 0, size, size);
 
         ctx.drawImage(img, 0, 0, size, size);
@@ -23,7 +22,6 @@ const createTintedPattern = (img: HTMLImageElement, color: string | null): Promi
             ctx.fillRect(0, 0, size, size);
         }
         
-        // 투명도를 유지하기 위해 PNG로 Data URL 반환
         resolve(canvas.toDataURL("image/png"));
     });
 };
@@ -44,7 +42,6 @@ export default function Home() {
     "#FECF59", "#F19EFF", "#84A6F6", "#D3CA9F",
   ];
   
-  // 🔥 초기값을 filters[0]으로 설정하여 색상 강제 활성화
   const [tintColor, setTintColor] = useState<string | null>(filters[0]); 
 
   // Body 스타일 강제 덮어쓰기
@@ -58,14 +55,6 @@ export default function Home() {
     "/patterns/p1.png", "/patterns/p2.png", "/patterns/p3.png", "/patterns/p4.png",
     "/patterns/p5.png", "/patterns/p6.png", "/patterns/p7.png", "/patterns/p8.png",
   ];
-
-  // 문양 이미지 로드
-  useEffect(() => {
-    if (!pattern) return setLoadedPatternImg(null);
-    const img = new Image();
-    img.src = pattern;
-    img.onload = () => setLoadedPatternImg(img);
-  }, [pattern]);
 
   // 프리뷰용 함수
   const drawTintedPattern = (
@@ -98,7 +87,15 @@ export default function Home() {
           console.error("카메라 접근 오류:", err);
       });
   }, []);
-  
+
+  // 문양 이미지 로드
+  useEffect(() => {
+    if (!pattern) return setLoadedPatternImg(null);
+    const img = new Image();
+    img.src = pattern;
+    img.onload = () => setLoadedPatternImg(img);
+  }, [pattern]);
+
   // 프리뷰 렌더링
   useEffect(() => {
     const loop = () => {
@@ -136,7 +133,7 @@ export default function Home() {
     loop(); 
   }, [loadedPatternImg, countdown, tintColor]); 
 
-  // 🔥 촬영 로직 (PNG 투명도 완벽 보정 로직 적용)
+  // 촬영 로직 (최종 사진에 컬러 반영)
   const performCapture = async () => {
     const video = videoRef.current;
     const capture = captureRef.current;
@@ -155,7 +152,6 @@ export default function Home() {
     let h = size / ratio;
     if (h < size) { h = size; w = size * ratio; }
 
-    // 비디오 원본 그리기 (배경)
     ctx.drawImage(video, (size - w) / 2, (size - h) / 2, w, h);
     
     // 2. 색상이 적용된 문양을 별도의 캔버스에서 생성 후 덧그리기
@@ -169,7 +165,6 @@ export default function Home() {
                 const overlaySize = size * 0.65;
                 const x = (size - overlaySize) / 2;
                 const y = (size - overlaySize) / 2;
-                // 이미 투명하게 처리된 이미지를 덧그림 (배경을 건드리지 않음)
                 ctx.drawImage(tintedPatternImg, x, y, overlaySize, overlaySize); 
                 resolve();
             };
@@ -180,7 +175,7 @@ export default function Home() {
     setFinalImage(base); // 최종 이미지 설정
 
     // 3. QR 코드 생성 (API 호출 활성화)
-    let imageUrl = "https://your-final-photo-link.com/photo-" + Date.now(); // 임시 URL
+    let imageUrl = "https://your-final-photo-link.com/photo-" + Date.now(); 
     
     try {
         const up = await fetch("/api/upload", { 
@@ -189,7 +184,7 @@ export default function Home() {
             body: JSON.stringify({ imageBase64: base }) 
         });
         const data = await up.json();
-        if (data.url) imageUrl = data.url; // 서버에서 반환한 실제 URL 사용
+        if (data.url) imageUrl = data.url; 
         else console.error("API 응답에 URL이 없습니다:", data);
 
     } catch (e) {
@@ -233,9 +228,10 @@ export default function Home() {
 
       <canvas ref={captureRef} className="hidden" />
 
+      {/* 🔥 촬영 버튼 수정: 배경 흰색, 글씨 검정, 테두리 검정 */}
       <button
         onClick={takePhoto} 
-        className="bg-green-600 text-white px-4 py-3 rounded w-full max-w-md text-lg font-semibold"
+        className="bg-white text-black border border-black px-4 py-3 rounded w-full max-w-md text-lg font-semibold"
       >
         3 · 2 · 1 촬영
       </button>
@@ -246,8 +242,9 @@ export default function Home() {
           <button
             key={p}
             onClick={() => setPattern(p)}
-            className={`p-1 rounded border ${
-              pattern === p ? "border-black" : "border-gray-400"
+            // 🔥 문양 버튼 수정: 모서리 더 둥글게 (rounded-xl)
+            className={`p-1 rounded-xl border ${
+              pattern === p ? "border-black" : "border-gray-500" // 테두리 조금 더 진하게
             }`}
           >
             <img src={p} className="w-full rounded" />
@@ -275,11 +272,4 @@ export default function Home() {
           
           {qrData && (
             <div className="bg-white p-4 rounded-lg border border-black">
-              <img src={qrData} className="w-40 h-40" /> 
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+              <img src={qrData} className="
