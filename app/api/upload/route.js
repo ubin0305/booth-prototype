@@ -9,26 +9,23 @@ export async function POST(req) {
       return NextResponse.json({ url: null, error: "NO_IMAGE" });
     }
 
-    // 로컬 환경에서 blob 작동안 할 때 가짜 URL 리턴
-    if (process.env.NODE_ENV === "development") {
-      return NextResponse.json({
-        url: "https://example.com/test-image.png"
-      });
-    }
+    // base64 -> buffer 변환
+    const base64 = imageBase64.split(",")[1];
+    const buffer = Buffer.from(base64, "base64");
 
-    // 실제 배포 환경에서만 업로드
-    const base64Data = imageBase64.split(",")[1];
-    const buffer = Buffer.from(base64Data, "base64");
+    // 파일명 랜덤 생성
+    const filename = `photo-${Date.now()}.png`;
 
-    const blob = await put(`photo-${Date.now()}.png`, buffer, {
-      access: "public",
-      contentType: "image/png",
+    // Blob Store에 업로드
+    const { url } = await put(filename, buffer, {
+      access: "public", // 누구나 볼 수 있게
     });
 
-    return NextResponse.json({ url: blob.url });
-
+    return NextResponse.json({ url });
   } catch (err) {
-    console.error("UPLOAD ERROR:", err);
-    return NextResponse.json({ url: null, error: String(err) });
+    return NextResponse.json({
+      url: null,
+      error: String(err),
+    });
   }
 }
