@@ -32,9 +32,9 @@ export default function Home() {
       .getUserMedia({ video: true })
       .then((stream) => {
         if (videoRef.current) {
-          (videoRef.current as HTMLVideoElement).srcObject = stream;
-          videoRef.current.play();
-        
+          const video = videoRef.current as HTMLVideoElement;
+          (video as any).srcObject = stream; // ★ 빌드 오류 해결 핵심
+          video.play();
         }
       })
       .catch((err) => console.error(err));
