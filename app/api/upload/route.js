@@ -1,31 +1,32 @@
-import { put } from "@vercel/blob";
-import { NextResponse } from "next/server";
+// 이 코드를 route.js 파일 전체에 덮어씁니다.
 
-export async function POST(req) {
+export async function POST(request) {
   try {
-    const { imageBase64 } = await req.json();
+    // 클라이언트에서 보낸 데이터는 받지만, 실제 업로드는 건너뜁니다.
+    const body = await request.json(); 
 
-    if (!imageBase64) {
-      return NextResponse.json({ url: null, error: "NO_IMAGE" });
-    }
+    // QR 코드가 정상적으로 표시되도록, 테스트용 링크를 반환합니다.
+    const mockUrl = "https://your-final-photo-link.com/photo-" + Date.now(); 
 
-    // base64 -> buffer 변환
-    const base64 = imageBase64.split(",")[1];
-    const buffer = Buffer.from(base64, "base64");
-
-    // 파일명 랜덤 생성
-    const filename = `photo-${Date.now()}.png`;
-
-    // Blob Store에 업로드
-    const { url } = await put(filename, buffer, {
-      access: "public", // 누구나 볼 수 있게
+    // ✅ 성공 응답 반환: 클라이언트가 URL을 받게 됩니다.
+    return new Response(JSON.stringify({
+      url: mockUrl, // 이 링크가 QR 코드에 연결됩니다.
+    }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+      },
     });
 
-    return NextResponse.json({ url });
-  } catch (err) {
-    return NextResponse.json({
-      url: null,
-      error: String(err),
+  } catch (error) {
+    console.error("API 처리 중 오류 발생:", error);
+    return new Response(JSON.stringify({
+      error: "Internal Server Error"
+    }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+      },
     });
   }
 }

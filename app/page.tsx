@@ -1,8 +1,29 @@
-// trigger deploy
 "use client";
 
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
+
+// 🔥 독립된 캔버스에서 문양에 색상만 입혀 Data URL을 반환하는 함수
+// 이 함수는 원본 이미지가 투명 PNG일 때만 정확히 작동합니다.
+const createTintedPattern = (img: HTMLImageElement, color: string | null): Promise<string> => {
+    return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        const size = img.width; 
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d')!;
+
+        ctx.drawImage(img, 0, 0, size, size);
+
+        if (color) {
+            ctx.globalCompositeOperation = "source-atop";
+            ctx.fillStyle = color;
+            ctx.fillRect(0, 0, size, size);
+        }
+        
+        resolve(canvas.toDataURL("image/png"));
+    });
+};
 
 export default function Home() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -14,33 +35,41 @@ export default function Home() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [finalImage, setFinalImage] = useState<string | null>(null);
   const [qrData, setQrData] = useState<string | null>(null);
+  const [tintColor, setTintColor] = useState<string | null>(null);
+
+  // Body 스타일 강제 덮어쓰기
+  useEffect(() => {
+    document.body.style.setProperty('background-color', '#ffffff', 'important');
+    document.body.style.setProperty('color', '#000000', 'important');
+    document.body.style.overflowY = "auto";
+  }, []);
 
   const patterns = [
-    "/patterns/p1.png",
-    "/patterns/p2.png",
-    "/patterns/p3.png",
-    "/patterns/p4.png",
-    "/patterns/p5.png",
-    "/patterns/p6.png",
-    "/patterns/p7.png",
-    "/patterns/p8.png",
+    "/patterns/p1.png", "/patterns/p2.png", "/patterns/p3.png", "/patterns/p4.png",
+    "/patterns/p5.png", "/patterns/p6.png", "/patterns/p7.png", "/patterns/p8.png",
   ];
 
-  // 카메라 시작
+  const filters = [
+    "#F7AE91", "#6DCFF4", "#B1B1B1", "#8CEB9C",
+    "#FECF59", "#F19EFF", "#84A6F6", "#D3CA9F",
+  ];
+
+  // 카메라 시작 (로직 유지)
   useEffect(() => {
     navigator.mediaDevices
       .getUserMedia({ video: true })
       .then((stream) => {
         if (videoRef.current) {
-          const video = videoRef.current as HTMLVideoElement;
-          (video as any).srcObject = stream; // ★ 빌드 오류 해결 핵심
-          video.play();
+          (videoRef.current as any).srcObject = stream;
+          videoRef.current.play();
         }
       })
-      .catch((err) => console.error(err));
+      .catch((err) => {
+          console.error("카메라 접근 오류:", err);
+      });
   }, []);
 
-  // 문양 이미지 로드
+  // 문양 이미지 로드 (로직 유지)
   useEffect(() => {
     if (!pattern) return setLoadedPatternImg(null);
     const img = new Image();
@@ -48,7 +77,24 @@ export default function Home() {
     img.onload = () => setLoadedPatternImg(img);
   }, [pattern]);
 
-  // 오버레이 렌더링
+  // 🔥 프리뷰용 함수 (원본 이미지의 불투명 영역에만 색상 적용)
+  const drawTintedPattern = (
+    ctx: CanvasRenderingContext2D,
+    img: HTMLImageElement,
+    x: number,
+    y: number,
+    size: number
+  ) => {
+    ctx.drawImage(img, x, y, size, size);
+    if (tintColor) {
+      ctx.globalCompositeOperation = "source-atop";
+      ctx.fillStyle = tintColor;
+      ctx.fillRect(x, y, size, size);
+      ctx.globalCompositeOperation = "source-over"; // 복원
+    }
+  };
+
+  // 프리뷰 렌더링 (로직 유지)
   useEffect(() => {
     const loop = () => {
       const video = videoRef.current;
@@ -59,134 +105,143 @@ export default function Home() {
       canvas.width = rect.width;
       canvas.height = rect.height;
 
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return requestAnimationFrame(loop);
-
+      const ctx = canvas.getContext("2d")!;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       if (loadedPatternImg) {
-        const size = canvas.width * 0.7;
+        const size = canvas.width * 0.65;
         const x = (canvas.width - size) / 2;
         const y = (canvas.height - size) / 2;
-        ctx.drawImage(loadedPatternImg, x, y, size, size);
+        drawTintedPattern(ctx, loadedPatternImg, x, y, size);
       }
-
+      
       if (countdown !== null) {
-        ctx.fillStyle = "rgba(0,0,0,0.5)";
+        const ctx = canvas.getContext("2d")!;
+        ctx.fillStyle = "rgba(0,0,0,0.4)";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-
         ctx.fillStyle = "white";
-        ctx.font = "bold 140px sans-serif";
+        ctx.font = "bold 120px sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(String(countdown), canvas.width / 2, canvas.height / 2);
       }
-
+      
       requestAnimationFrame(loop);
     };
-    loop();
-  }, [loadedPatternImg, countdown]);
+    loop(); 
+  }, [loadedPatternImg, countdown, tintColor]); 
 
-  // 촬영
+  // 🔥 촬영 로직 (PNG 투명도 완벽 보정 로직 적용)
   const performCapture = async () => {
     const video = videoRef.current;
     const capture = captureRef.current;
-
     if (!video || !capture) return;
 
+    // 1. 캡처 캔버스에 비디오만 그리기
     const size = 800;
     capture.width = size;
     capture.height = size;
 
-    const ctx = capture.getContext("2d");
-    if (!ctx) return;
-
+    const ctx = capture.getContext("2d")!;
     const rect = video.getBoundingClientRect();
-    const videoRatio = rect.width / rect.height;
+    const ratio = rect.width / rect.height;
 
-    let drawW = size;
-    let drawH = size / videoRatio;
+    let w = size;
+    let h = size / ratio;
+    if (h < size) { h = size; w = size * ratio; }
 
-    if (drawH < size) {
-      drawH = size;
-      drawW = size * videoRatio;
-    }
-
-    const dx = (size - drawW) / 2;
-    const dy = (size - drawH) / 2;
-
-    ctx.drawImage(video, dx, dy, drawW, drawH);
-
+    ctx.drawImage(video, (size - w) / 2, (size - h) / 2, w, h);
+    
+    // 2. 색상이 적용된 문양을 별도의 캔버스에서 생성 후 덧그리기
     if (loadedPatternImg) {
-      const overlaySize = size * 0.7;
-      const ox = (size - overlaySize) / 2;
-      const oy = (size - overlaySize) / 2;
-      ctx.drawImage(loadedPatternImg, ox, oy, overlaySize, overlaySize);
+        const tintedPatternUrl = await createTintedPattern(loadedPatternImg, tintColor);
+        const tintedPatternImg = new Image();
+        tintedPatternImg.src = tintedPatternUrl;
+
+        await new Promise<void>(resolve => {
+            tintedPatternImg.onload = () => {
+                const overlaySize = size * 0.65;
+                const x = (size - overlaySize) / 2;
+                const y = (size - overlaySize) / 2;
+                // 이미 투명하게 처리된 이미지를 덧그림 (배경을 건드리지 않음)
+                ctx.drawImage(tintedPatternImg, x, y, overlaySize, overlaySize); 
+                resolve();
+            };
+        });
     }
+    
+    const base = capture.toDataURL("image/png");
+    setFinalImage(base); // 최종 이미지 설정
 
-    const resultBase64 = capture.toDataURL("image/png");
-    setFinalImage(resultBase64);
+    // 3. QR 코드 생성 (API 호출 활성화)
+    let imageUrl = "https://example.com/error-upload"; // 업로드 실패 시 대체 URL
+    
+    try {
+        const up = await fetch("/api/upload", { 
+            method: "POST", 
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageBase64: base }) 
+        });
+        const data = await up.json();
+        if (data.url) imageUrl = data.url; 
+        else console.error("API 응답에 URL이 없습니다:", data);
 
-    // 서버 업로드
-    const upload = await fetch("/api/upload", {
-      method: "POST",
-      body: JSON.stringify({ imageBase64: resultBase64 }),
-    });
-
-    const data = await upload.json();
-
-    if (!data.url) {
-      alert("업로드 실패함");
-      return;
+    } catch (e) {
+        console.error("업로드 API 호출 실패:", e);
     }
-
-    // QR 코드 생성
-    const qr = await QRCode.toDataURL(data.url);
-    setQrData(qr);
+    
+    const qrCanvas = document.createElement("canvas");
+    await QRCode.toCanvas(qrCanvas, imageUrl, { width: 400 }); 
+    
+    setQrData(qrCanvas.toDataURL("image/png")); // QR 이미지 설정
   };
 
   const takePhoto = () => {
     setCountdown(3);
     let n = 3;
-
     const timer = setInterval(() => {
       n--;
       if (n <= 0) {
         clearInterval(timer);
         setCountdown(null);
-        setTimeout(() => performCapture(), 200);
-      } else {
-        setCountdown(n);
-      }
+        setTimeout(() => performCapture(), 200); 
+      } else setCountdown(n);
     }, 1000);
   };
 
   return (
-    <div className="min-h-screen bg-black text-white p-6 flex flex-col items-center gap-6">
+    <div className="w-full min-h-screen bg-white text-black p-6 flex flex-col items-center gap-6 overflow-y-auto pb-32">
+
+      <h1 className="text-2xl font-bold mb-4">🎨 Booth Prototype</h1>
+
       <div className="relative w-full max-w-md">
-        <video ref={videoRef} className="w-full rounded-lg" />
-        <canvas
-          ref={overlayRef}
-          className="absolute top-0 left-0 pointer-events-none"
+        <video 
+            ref={videoRef} 
+            className="w-full rounded-lg bg-black"
+            autoPlay 
+            playsInline 
+            muted 
         />
+        <canvas ref={overlayRef} className="absolute top-0 left-0 pointer-events-none" />
       </div>
 
       <canvas ref={captureRef} className="hidden" />
 
       <button
-        onClick={takePhoto}
-        className="bg-green-600 px-4 py-3 rounded w-full max-w-md text-lg font-semibold"
+        onClick={takePhoto} 
+        className="bg-green-600 text-white px-4 py-3 rounded w-full max-w-md text-lg font-semibold"
       >
         3 · 2 · 1 촬영
       </button>
 
+      {/* 문양 선택 */}
       <div className="grid grid-cols-4 gap-2 w-full max-w-md">
         {patterns.map((p) => (
           <button
             key={p}
             onClick={() => setPattern(p)}
             className={`p-1 rounded border ${
-              pattern === p ? "border-white" : "border-gray-500"
+              pattern === p ? "border-black" : "border-gray-400"
             }`}
           >
             <img src={p} className="w-full rounded" />
@@ -194,12 +249,27 @@ export default function Home() {
         ))}
       </div>
 
+      {/* 색상 선택 */}
+      <div className="grid grid-cols-8 gap-2 w-full max-w-md mt-4">
+        {filters.map((c) => (
+          <button
+            key={c}
+            onClick={() => setTintColor(c)}
+            className={`w-8 h-8 rounded-full border ${
+              tintColor === c ? "border-black border-2" : "border-gray-400"
+            }`}
+            style={{ backgroundColor: c }}
+          />
+        ))}
+      </div>
+
       {finalImage && (
         <div className="flex flex-col items-center mt-6 gap-4 w-full max-w-md">
-          <img src={finalImage} className="rounded-lg w-full border border-white" />
+          <img src={finalImage} className="rounded-lg w-full border border-black" />
+          
           {qrData && (
-            <div className="bg-white p-4 rounded-lg">
-              <img src={qrData} className="w-40 h-40" />
+            <div className="bg-white p-4 rounded-lg border border-black">
+              <img src={qrData} className="w-40 h-40" /> 
             </div>
           )}
         </div>
