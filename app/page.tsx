@@ -32,8 +32,9 @@ export default function Home() {
       .getUserMedia({ video: true })
       .then((stream) => {
         if (videoRef.current) {
-          videoRef.current.srcObject = stream;
+          (videoRef.current as HTMLVideoElement).srcObject = stream;
           videoRef.current.play();
+        
         }
       })
       .catch((err) => console.error(err));
