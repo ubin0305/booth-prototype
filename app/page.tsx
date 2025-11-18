@@ -5,15 +5,15 @@ import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 
 export default function Home() {
-  const videoRef = useRef(null);
-  const overlayRef = useRef(null);
-  const captureRef = useRef(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const overlayRef = useRef<HTMLCanvasElement | null>(null);
+  const captureRef = useRef<HTMLCanvasElement | null>(null);
 
-  const [pattern, setPattern] = useState(null);
-  const [loadedPatternImg, setLoadedPatternImg] = useState(null);
-  const [countdown, setCountdown] = useState(null);
-  const [finalImage, setFinalImage] = useState(null);
-  const [qrData, setQrData] = useState(null);
+  const [pattern, setPattern] = useState<string | null>(null);
+  const [loadedPatternImg, setLoadedPatternImg] = useState<HTMLImageElement | null>(null);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [finalImage, setFinalImage] = useState<string | null>(null);
+  const [qrData, setQrData] = useState<string | null>(null);
 
   const patterns = [
     "/patterns/p1.png",
@@ -59,6 +59,8 @@ export default function Home() {
       canvas.height = rect.height;
 
       const ctx = canvas.getContext("2d");
+      if (!ctx) return requestAnimationFrame(loop);
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       if (loadedPatternImg) {
@@ -87,16 +89,16 @@ export default function Home() {
   // 촬영
   const performCapture = async () => {
     const video = videoRef.current;
-    const overlay = overlayRef.current;
     const capture = captureRef.current;
 
-    if (!video || !overlay || !capture) return;
+    if (!video || !capture) return;
 
     const size = 800;
     capture.width = size;
     capture.height = size;
 
     const ctx = capture.getContext("2d");
+    if (!ctx) return;
 
     const rect = video.getBoundingClientRect();
     const videoRatio = rect.width / rect.height;
@@ -162,7 +164,10 @@ export default function Home() {
     <div className="min-h-screen bg-black text-white p-6 flex flex-col items-center gap-6">
       <div className="relative w-full max-w-md">
         <video ref={videoRef} className="w-full rounded-lg" />
-        <canvas ref={overlayRef} className="absolute top-0 left-0 pointer-events-none" />
+        <canvas
+          ref={overlayRef}
+          className="absolute top-0 left-0 pointer-events-none"
+        />
       </div>
 
       <canvas ref={captureRef} className="hidden" />
